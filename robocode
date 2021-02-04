@@ -1,0 +1,146 @@
+package aed4lol;
+import robocode.*;
+import java.util.*;
+import robocode.util.Utils;
+import java.awt.*;
+import java.lang.*;
+import java.lang.Object;
+import java.io.IOException;
+
+/**
+ * DOArobot - a robot by Ally Delgado
+ */
+public class DOArobot extends TeamRobot
+{
+	double gunTurnAmt; // How much to turn gun when scanning for robot
+	double previousEnergy = 100; // initialize enemy energy
+	int movementDirection = 1; //this uses a scale of -1 to 1 to initialize movement. forward = (1), no movement = (0), back = (-1)
+	boolean movingForward;
+	boolean inWall = false;
+	
+	public void run() {
+		//allow each part of the robot to move independently
+		setAdjustRadarForRobotTurn(true);
+		setAdjustGunForRobotTurn(true);
+		setAdjustRadarForGunTurn(false); 
+
+		//set robot colors
+		setColors(Color.green,Color.green,Color.green); // body,gun,radar
+	
+		while(true) {
+			setTurnGunRightRadians(360000); //turn gun in circle which carries radar with it
+			//setTurnRadarRightRadians(360000000); //scan in a circle 
+			setTurnRight(10000000); //turn right
+			ahead(500); // move
+		}
+	}
+	
+
+	public void onScannedRobot(ScannedRobotEvent e) {
+	
+		//if the scanned robot is your teammate, don't pursue it to avoid friendly fire
+		if (isTeammate(e.getName())) {
+			return;
+		}
+		
+		//find angle to enemy (bearing)
+		double angleToEnemy = getHeadingRadians() + e.getBearingRadians();
+		
+		//subtract the way the radar is pointing from enemy's angle to get the angle that you need to turn the radar
+		// to in order to hit enemy
+		double radarTurn = Utils.normalRelativeAngle(angleToEnemy - getRadarHeadingRadians());
+		
+		/* Comments for turnMore:
+		 *
+		 * turnMore is the distance we want to scan from the center of the enemy's location to either side 
+		 * ^ (to have a wide scan rane)
+		 * the 35.0 number is the amount of units from the middle of the enemy the radar scans
+		 * it does this by returning the minimum of the arctangent (aka atan) of 
+		 *(37 units / enemy's distance) and converts it intoradians
+		 * (Radian conversion is done by Rules.RADAR_TURN_RATE_RADIANS which overrides the game's tendency to measure in degrees)
+		 * 
+		 * The purpose of this is to turn the radar more than it needs to (we can predict the enemy will continue on its path)
+		 * for example if you notice an enemy to righ right, it will turn even more right to catch the enemy if it moves
+		 * 
+		 * Overscanning is better than underscanning
+		 */
+		double turnMore = Math.min(Math.atan(37.0 / e.getDistance()), Rules.RADAR_TURN_RATE_RADIANS);
+		
+		//if the radar turn amount is less than 0, set it to negative so it goes backwards and hopefully finds the robot there
+		if (radarTurn < 0 ){
+			turnMore = -turnMore;
+		}
+		//otherwise just let it be
+		else {
+		turnMore = turnMore;
+		}
+		
+		//turn the radar for real now
+		setTurnRadarRightRadians(radarTurn);
+		setTurnGunRightRadians(radarTurn); //turn gun too
+		fire(1); //fire
+
+		//if robot scanned is far away (>150):
+		if (e.getDistance() > 150) {
+			//turn gun to the angle of (enemy's bearing + (direction heading - direction radar is facing))
+			gunTurnAmt = Utils.normalRelativeAngleDegrees(e.getBearing() + (getHeading() - getRadarHeading()));
+			turnGunRightRadians(gunTurnAmt); //turn gun to the right the angle we found above^
+			fire(2);
+			turnRight(e.getBearing()); //turn robot body right to the enemy's bearing
+			ahead(e.getDistance() - 140); //move forward their distance -140 so that we get close but do not touch it
+			return;
+		}
+		
+		//if robot is closer (<150):
+		if (e.getDistance() <150) {
+			
+			//turn gun to the angle of (enemy's bearing + (direction heading - direction radar is facing))
+			gunTurnAmt = Utils.normalRelativeAngleDegrees(e.getBearing() + (getHeading() - getRadarHeading()));
+			turnGunRightRadians(gunTurnAmt); //point gun at the amount specified earlier^
+			fire(2); // shoot!
+		}
+		
+
+		//DODGING BULLET STRATEGY:
+		// If the robot scanned has loses a small amount of energy, we can assume it fired a bullet
+   	    double changeInEnergy =	previousEnergy-e.getEnergy(); //prev energy - current energy
+   	 	if (changeInEnergy>0 && changeInEnergy<=3) { //energy drop range for bullet fire is a value in between .01 and 3
+         
+         	movementDirection = -movementDirection;	// Dodge by moving in opposite direction (this is the - )
+         	
+			//move ahead towards (enemy distance divided by 4, then 25 ahead of that so you get close but not too close) in the movement direction
+			setAhead( (e.getDistance()/4+25)*movementDirection);
+
+			previousEnergy = e.getEnergy(); //track new energy level
+			}
+
+	}
+
+	public void onHitByBullet(HitByBulletEvent e) {
+		turnRight(90);
+		ahead(100);
+	}
+	
+
+	public void onHitWall(HitWallEvent e) {
+		back(100);
+		turnRight(180);
+		ahead(100);
+	}
+	
+	public void onWin(WinEvent e) {
+		// Do a victory dance
+		turnRight(3600000);
+		ahead(1000);
+		back(1000);
+		turnRight(3600000);
+	}
+	
+}
+
+
+
+
+
+
+
